@@ -3,7 +3,6 @@ data = readtable("California_newHIVcases_byyear");
 % Convert dates
 years = table2array(data(:,1));
 infected = table2array(data(:,2));
-%%
 % Time in years since first observation
 
 infected_data = infected;
@@ -12,26 +11,32 @@ infected_time = years;
 % Plot raw data
 figure;
 scatter(infected_time, infected_data, 10, 'r', 'filled')
-title("Fake Infection Data")
-ylabel("Cases")
+title("New HIV Infections in California")
+ylabel("Year")
 
 %% Initial conditions
-initial_conditions = [29999990; 5000; 500; 0];
+initial_conditions = [0; 20000; 500; 400; 0];
 
 %% Fixed parameters
-pi_val = 1/9000;
-delta_val = 1/9000;
-
+pi_val = 376078.91;
+mu_val = 0.009043;
+sigma_val = 0.0885;
+tau_I = 0.2;
+tau_A = 0.25;
+beta_val = 9.61*10^-6;
+delta_I_val = 0.0158;
+delta_A_val = 1/3;
+A = [pi_val, mu_val, sigma_val, tau_I, tau_A, beta_val, delta_I_val, delta_A_val];
 %% Initial guesses for parameters to fit
-% [beta, xi, sigma, gamma]
-beta0 = [0.3, 1/90, 1/3, 1/7];
+% [eta, epsilon, q]
+beta0 = [0.5, 0.95, 0.037];
 
 % Bounds (equivalent to min/max in lmfit)
-lb = [0.1, 1/270, 1/5, 1/21];
-ub = [3,   1/30,  1,   1/5];
+lb = [0, 0, 0];
+ub = [1, 1, 1];
 
 %% Define model for fitting
-model_fun = @(b, t) model_wrapper(b, t, initial_conditions, pi_val, delta_val);
+model_fun = @(b, t) model_wrapper(b, t, initial_conditions, A);
 
 %% Perform fitting
 options = optimoptions('lsqcurvefit', ...
@@ -46,26 +51,22 @@ predicted_cases = model_fun(beta_fit, infected_time);
 
 %% Plot results
 figure;
-plot(infected_dates, predicted_cases, 'LineWidth', 2)
+plot(infected_time, predicted_cases, 'LineWidth', 2)
 hold on
-scatter(infected_dates, infected_data, 10, 'r', 'filled')
+scatter(infected_time, infected_data, 10, 'r', 'filled')
 ylabel("Cases")
 title("Data Fitting Result")
-xticks(infected_dates(1:10:end))
-xtickangle(70)
 legend("Predicted Cases (model)", "True Cases (data)")
 hold off
 
 %% Display fitted parameters
 beta_fit
 
-function I_out = model_wrapper(b, t, IC, pi_val, delta_val)
-    beta  = b(1);
-    xi    = b(2);
-    sigma = b(3);
-    gamma = b(4);
-
-    params = [pi_val, xi, beta, delta_val, sigma, gamma];
+function I_out = model_wrapper(b, t, IC, A)
+    eta  = b(1);
+    epsilon = b(2);
+    q = b(3);
+    params = [A, eta, epsilon, q];
 
     [t_sol, sol] = ode45(@(t,y) disease_dynamics(t,y,params), [t(1), t(end)], IC);
 
@@ -74,24 +75,31 @@ end
 
 
 function ddt = disease_dynamics(t, states, params)
-    S = states(1);
-    E = states(2);
+    Sl = states(1);
+    Sh = states(2);
     I = states(3);
-    R = states(4);
+    A = states(4);
+    T = states(5);
 
     N = sum(states);
 
     pi    = params(1);
-    xi    = params(2);
-    beta  = params(3);
-    delta = params(4);
-    sigma = params(5);
-    gamma = params(6);
+    mu  = params(2);
+    sigma = params(3);
+    tau_I = params(4);
+    tau_A = params(5);
+    beta = params(6);
+    delta_I = params(7);
+    delta_A = params(8);
+    eta = params(9);
+    epsilon = params(10);
+    q = params(11);
 
-    dSdt = pi + xi*R - beta*(S/N)*I - delta*S;
-    dEdt = beta*(S/N)*I - (sigma + delta)*E;
-    dIdt = sigma*E - (gamma + delta)*I;
-    dRdt = gamma*I - (delta + xi)*R;
+    dSldt = pi*(1-q)-beta*((eta*I+A)/N)*Sl-mu*Sl;
+    dShdt = pi*q-beta*(1-epsilon)*((eta*I+A)/N)*Sh-mu*Sh;
+    dIdt = beta*((eta*I+A)/N)*(Sl+(1-epsilon)*Sh)-sigma*I-tau_I*I-mu*I-delta_I*I;
+    dAdt = sigma*I-tau_A*A-mu*A-delta_A*A;
+    dTdt = tau_I*I+tau_A*A-mu*T;
 
-    ddt = [dSdt; dEdt; dIdt; dRdt];
+    ddt = [dSldt; dShdt; dIdt; dAdt ; dTdt];
 end
