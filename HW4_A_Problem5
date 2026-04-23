@@ -1,0 +1,45 @@
+
+
+% Parameters identified by literature
+beta = 9.61 * 10 ^ (-6);
+eta = .50;
+tau_a = 0.25;
+mu = 0.009034;
+delta_a = 0.47;
+sigma = 0.0885;
+tau_i = 0.2;
+delta_i = 0.0158;
+
+% Grid
+q = linspace(0,1,50);
+epsilon = linspace(0,1,50);
+
+[Q, E] = meshgrid(q, epsilon);
+
+Rc_vals = zeros(size(Q));
+
+for i = 1:numel(Q)
+    Rc_vals(i) = Rc(beta, eta, tau_a, mu, delta_a, sigma, ...
+                    Q(i), E(i), tau_i, delta_i);
+end
+
+% Plot
+figure;
+contourf(Q, E, Rc_vals, 20);
+colorbar;
+xlabel('q');
+ylabel('\epsilon_p');
+title('Control Reproduction Number');
+
+
+
+function Rc = Rc(beta, eta, tau_a, mu, delta_a, sigma, q, epsilon, tau_i, delta_i)
+
+numerator = (beta*eta*(tau_a + mu + delta_a) + beta*sigma)*(q - epsilon*q);
+denominator = (sigma + tau_i + mu + delta_i)*(tau_a + mu + delta_a);
+
+Rc = numerator / denominator;
+end
+
+
+
