@@ -45,7 +45,7 @@ options = optimoptions('lsqcurvefit', ...
     'MaxFunctionEvaluations', 200, ...
     'MaxIterations', 50);
 
-beta_fit = lsqcurvefit(model_fun, beta0, infected_time, infected_data, lb, ub, options);
+[beta_fit,resnorm,resid,exitflag,output,lambda,J] = lsqcurvefit(model_fun, beta0, infected_time, infected_data, lb, ub, options);
 
 %% Get predicted values
 predicted_cases = model_fun(beta_fit, infected_time);
@@ -113,3 +113,5 @@ R0 = (beta*eta*(tau_A+mu_val+delta_A)+sigma_val*beta)/((sigma_val+tau_I+mu_val+d
 RV = ((beta*eta*(tau_A+mu_val+delta_A)+sigma_val*beta)*(q-epsilon*q))/((sigma_val+tau_I+mu_val+delta_I)*(tau_A+mu_val+delta_A))
 
 hit =(1-(1/R0))
+
+ci = nlparci(beta_fit,resid,'jacobian', J)
