@@ -15,21 +15,22 @@ title("New HIV Infections in California")
 ylabel("Year")
 
 %% Initial conditions
-initial_conditions = [0; 20000; 500; 400; 0];
+initial_conditions = [200000; 150000; 5000; 1000; 500];
 
-%% Fixed parameters
+%% Fixed parameters (no PrEP)
 pi_val = 376078.91;
 mu_val = 0.009043;
 sigma_val = 0.0885;
-tau_I = 0.2;
-tau_A = 0.25;
-beta_val = 9.61*10^-6;
-delta_I_val = 0.0158;
-delta_A_val = 1/3;
-A = [pi_val, mu_val, sigma_val, tau_I, tau_A, beta_val, delta_I_val, delta_A_val];
+tau_I = 0;
+tau_A = 0;
+epsilon = 0;
+eta = 0.5;
+q = 0.037;
+
+A = [pi_val, mu_val, sigma_val, tau_I, tau_A, epsilon, eta, q];
 %% Initial guesses for parameters to fit
-% [eta, epsilon, q]
-beta0 = [0.5, 0.95, 0.037];
+% [beta, deltaI, deltaA]
+beta0 = [9.61*10^-6, 0.01598, 0.47];
 
 % Bounds (equivalent to min/max in lmfit)
 lb = [0, 0, 0];
@@ -63,10 +64,10 @@ hold off
 beta_fit
 
 function I_out = model_wrapper(b, t, IC, A)
-    eta  = b(1);
-    epsilon = b(2);
-    q = b(3);
-    params = [A, eta, epsilon, q];
+    beta  = b(1);
+    deltaI = b(2);
+    deltaA = b(3);
+    params = [A, beta, deltaI, deltaA];
 
     [t_sol, sol] = ode45(@(t,y) disease_dynamics(t,y,params), [t(1), t(end)], IC);
 
@@ -83,17 +84,17 @@ function ddt = disease_dynamics(t, states, params)
 
     N = sum(states);
 
-    pi    = params(1);
-    mu  = params(2);
+    pi = params(1);
+    mu = params(2);
     sigma = params(3);
     tau_I = params(4);
     tau_A = params(5);
-    beta = params(6);
-    delta_I = params(7);
-    delta_A = params(8);
-    eta = params(9);
-    epsilon = params(10);
-    q = params(11);
+    epsilon = params(6);
+    eta = params(7);
+    q = params(8);
+    beta = params(9);
+    delta_I = params(10);
+    delta_A = params(11);
 
     dSldt = pi*(1-q)-beta*((eta*I+A)/N)*Sl-mu*Sl;
     dShdt = pi*q-beta*(1-epsilon)*((eta*I+A)/N)*Sh-mu*Sh;
@@ -103,3 +104,12 @@ function ddt = disease_dynamics(t, states, params)
 
     ddt = [dSldt; dShdt; dIdt; dAdt ; dTdt];
 end
+%%
+beta = beta_fit(:,1);
+delta_I = beta_fit(:,2);
+delta_A = beta_fit(:,3);
+
+R0 = (beta*eta*(tau_A+mu_val+delta_A)+sigma_val*beta)/((sigma_val+tau_I+mu_val+delta_I)*(tau_A+mu_val+delta_A))
+RV = ((beta*eta*(tau_A+mu_val+delta_A)+sigma_val*beta)*(q-epsilon*q))/((sigma_val+tau_I+mu_val+delta_I)*(tau_A+mu_val+delta_A))
+
+hit =(1-(1/R0))
