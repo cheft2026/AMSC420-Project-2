@@ -1,0 +1,229 @@
+%Group A: New HIV Cases in California
+%By Sofia Fontana and Connor Heft
+%HW6 
+%Loading Data, Initial Conditions, & Parameters
+%% Load data
+data = readtable("California_newHIVcases_byyear.txt");
+% Convert dates
+years = table2array(data(:,1));
+infected = table2array(data(:,2));
+% Time in years since first observation
+
+infected_data = infected;
+infected_time = years;
+
+
+%% Initial conditions, same for all parts
+initial_conditions = [29196876; 1121790; 5000; 3000; 100000]; % Sl, Sh, I, A, T
+
+%% Fixed parameters
+pi = 275537;
+q = 0.037;
+eta = 0.7;
+mu = 0.009043;
+epsilon = 0.99;
+c_p = 1./3;
+sigma = 0.0885;
+tau_I = 0.6;
+tau_A = 1.2;
+beta = 1;
+delta_I = 0.034185;
+delta_A = 0.84026;
+
+A_params = [pi, q, eta, mu, epsilon, c_p, sigma, tau_I, tau_A, beta, delta_I, delta_A];
+
+
+
+
+%A) Simulations for 10 years
+tspan = linspace(0, 10, 3650); %Steps for each day
+[t_sol, sol] = ode45(@(t, y) disease_dynamics(t,y,A_params), tspan, initial_conditions);
+
+%State variables as a function of time
+Sl_state = sol(:, 1);
+Sh_state = sol(:, 2);
+I_state = sol(:, 3);
+A_state = sol(:, 4);
+T_state = sol(:, 5);
+
+%i) Daily incidence (new cases) as a function of time
+incidence = beta*((eta*I_state+A_state)./N).*(Sl_state+(1-epsilon*c_p)*Sh_state);
+
+figure;
+plot(tspan, incidence, 'LineWidth', 2)
+hold on
+ylabel("Daily Incidence")
+xlabel("Year")
+title("HIV Daily Incidence")
+ylim([0, 7000])
+hold off
+
+%ii) Cumulative incidence as a function of time
+cumulative_incidence = cumtrapz(t_sol, incidence);
+
+figure;
+plot(tspan, cumulative_incidence, 'LineWidth', 2)
+hold on
+ylabel("Daily Incidence")
+xlabel("Year")
+title("HIV Cumulative Daily Incidence")
+hold off
+
+%iii) Daily mortality as a function of time
+mortality = delta_I*I_state + delta_A*A_state; %death from disease and natural causes
+
+figure;
+plot(tspan, mortality, 'LineWidth', 2)
+hold on
+ylabel("Daily Mortality")
+xlabel("Year")
+title("HIV Daily Mortality")
+hold off
+
+%iv) Cumulative mortality as a function of time
+cumulative_mortality = cumtrapz(t_sol, mortality);
+
+figure;
+plot(tspan, cumulative_mortality, 'LineWidth', 2)
+hold on
+ylabel("Daily Mortality")
+xlabel("Year")
+title("HIV Cumulative Daily Mortality")
+hold off
+
+
+%B) Eta values
+eta_vals = [0.5, 0.75, 1];
+colors = ["r", "b", "k"];
+
+
+%i) Number of New Cases as a function of time
+figure; hold on;
+for i = 1:3
+
+    A_current = A_params;
+    A_current(3) = eta_vals(i); %Replacing eta value
+
+    [t_sol, sol] = ode45(@(t, y) disease_dynamics(t, y, A_current), tspan, initial_conditions);
+
+    %State variables as a function of time
+    Sl_state = sol(:, 1);
+    Sh_state = sol(:, 2);
+    I_state = sol(:, 3);
+    A_state = sol(:, 4);
+    T_state = sol(:, 5);
+
+    incidence = beta*((eta_vals(i)*I_state+A_state)./N).*(Sl_state+(1-epsilon*c_p)*Sh_state);
+
+    plot(t_sol, incidence, colors(i));
+end
+
+xlabel('Year')
+ylabel('Daily Incidence')
+title('Effect of \eta on Daily Incidence')
+legend('\eta = 0.5', '\eta = 0.75', '\eta = 1', 'Location', 'Best')
+hold off;
+
+%ii) Number of daily deaths as a function of time
+
+figure; hold on;
+for i = 1:3
+
+    A_current = A_params;
+    A_current(3) = eta_vals(i); %Replacing eta value
+
+    [t_sol, sol] = ode45(@(t, y) disease_dynamics(t, y, A_current), tspan, initial_conditions);
+
+    %State variables as a function of time
+    Sl_state = sol(:, 1);
+    Sh_state = sol(:, 2);
+    I_state = sol(:, 3);
+    A_state = sol(:, 4);
+    T_state = sol(:, 5);
+
+    mortality = delta_I*I_state + delta_A*A_state;
+
+    plot(t_sol, mortality, colors(i));
+end
+
+xlabel('Year')
+ylabel('Daily Mortality')
+title('Effect of \eta on Daily Mortality')
+legend('\eta = 0.5', '\eta = 0.75', '\eta = 1', 'Location', 'Best')
+hold off;
+
+
+
+
+%C) q values
+q_vals = [0, 0.25, 0.5, 0.75, 1];
+colors = ["r", "b", "k", "g", "y"];
+
+
+%i) Number of New Cases as a function of time
+figure; hold on;
+for i = 1:5
+
+    A_current = A_params;
+    A_current(2) = q_vals(i); %Replacing q value
+
+    [t_sol, sol] = ode45(@(t, y) disease_dynamics(t, y, A_current), tspan, initial_conditions);
+
+    %State variables as a function of time
+    Sl_state = sol(:, 1);
+    Sh_state = sol(:, 2);
+    I_state = sol(:, 3);
+    A_state = sol(:, 4);
+    T_state = sol(:, 5);
+
+    incidence = beta*((eta*I_state+A_state)./N).*(Sl_state+(1-epsilon*c_p)*Sh_state);
+
+    plot(t_sol, incidence, colors(i));
+end
+
+xlabel('Year')
+ylabel('Daily Incidence')
+title('Effect of q on Daily Incidence')
+legend('q = 0', 'q = 0.25', 'q = 0.5', 'q = 0.75', 'q = 1', 'Location', 'Best')
+ylim([0, 7000])
+hold off;
+
+
+
+
+
+
+
+
+
+%Model Functions
+function ddt = disease_dynamics(t, states, params)
+Sl = states(1);
+Sh = states(2);
+I = states(3);
+A = states(4);
+T = states(5);
+
+N = sum(states);
+
+pi    = params(1);
+q  = params(2);
+eta = params(3);
+mu = params(4);
+epsilon = params(5);
+c_p = params(6);
+sigma = params(7);
+tau_I = params(8);
+tau_A = params(9);
+beta = params(10);
+delta_I = params(11);
+deltA = params(12);
+
+dSldt = pi*(1-q)-beta*((eta*I+A)/N)*Sl-mu*Sl;
+dShdt = pi*q-beta*(1-c_p*epsilon)*((eta*I+A)/N)*Sh-mu*Sh;
+dIdt = beta*((eta*I+A)/N)*(Sl+(1-c_p*epsilon)*Sh)-sigma*I-tau_I*I-mu*I-delta_I*I;
+dAdt = sigma*I-tau_A*A-mu*A-deltA*A;
+dTdt = tau_I*I+tau_A*A-mu*T;
+
+ddt = [dSldt; dShdt; dIdt; dAdt ; dTdt];
+end
