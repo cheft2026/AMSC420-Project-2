@@ -12,134 +12,24 @@ infected = table2array(data(:,2));
 infected_data = infected;
 infected_time = years;
 
-% Plot raw data
-figure;
-scatter(infected_time, infected_data, 10, 'r', 'filled')
-title("New HIV Infections in California")
-ylabel("New Cases")
-xlabel("Year")
-
-% Plot raw data with standard axes
-figure;
-scatter(infected_time, infected_data, 10, 'r', 'filled')
-title("New HIV Infections in California")
-ylabel("New Cases")
-xlabel("Year")
-ylim([0, 6000])
-
-%Conditions and Parameters
 %% Initial conditions, same for all parts
-initial_conditions = [29196876; 1121790; 5000; 3000; 100232]; % Sl, Sh, I, A, T
-%[40049097.68; 1538750.378; 5000; 3000; 2000]
-%[29196876; 1121790; 45333; 35768; 100232]
+initial_conditions = [29196876; 1121790; 5000; 3000; 100000]; % Sl, Sh, I, A, T
 
 %% Fixed parameters
 pi_val = 275537;
 q_val = 0.037;
 eta_val = 0.7;
 mu_val = 0.009043;
-epsilon_val = 0.99/3;
+epsilon_val = 0.99;
 sigma_val = 0.0885;
-tau_I = 0.2;
-tau_A = 0.5;
+tau_I = 0.6;
+tau_A = 1.2;
+cp_val = 1/3;
 
 % Part a. Model without PrEP
-A = [pi_val, q_val, eta_val, mu_val, epsilon_val, sigma_val, tau_I, tau_A];
+A = [pi_val, q_val, eta_val, mu_val, epsilon_val, sigma_val, tau_I, tau_A, cp_val];
 
-%% Initial guesses for parameters to fit
-% [beta, delta I, delta A]
-beta0 = [0.6, 0.0158, 0.47];
-
-% Bounds (equivalent to min/max in lmfit)
-lb = [0, 0, 0];
-ub = [1, 1, 1];
-
-
-%Model Fitting
-%% Define model for fitting
-model_fun = @(b, t) model_wrapper(b, t, initial_conditions, A); % Part a. Model without PrEP
-
-
-%% Perform fitting
-options = optimoptions('lsqcurvefit', 'Display','iter', ...
-    'MaxFunctionEvaluations', 200, 'MaxIterations', 50);
-
-[beta_fit,resnorm,resid,exitflag,output,lambda,J] = lsqcurvefit(model_fun, beta0, infected_time, infected_data, lb, ub, options);
-
-
-%% Get predicted values
-predicted_cases = model_fun(beta_fit, infected_time);
-
-% Part a. Model without PrEP
-figure;
-plot(infected_time, predicted_cases, 'LineWidth', 2)
-hold on
-scatter(infected_time, infected_data, 10, 'r', 'filled')
-ylabel("New Cases")
-xlabel("Year")
-title("Data Fitting Results with PrEP")
-legend("Predicted Cases (model)", "True Cases (data)", 'Location', 'Best')
-hold off
-
-
-% Part a. Model without PrEP with normal axes
-figure;
-plot(infected_time, predicted_cases, 'LineWidth', 2)
-hold on
-scatter(infected_time, infected_data, 10, 'r', 'filled')
-ylabel("New Cases")
-xlabel("Year")
-ylim([0, 6000])
-title("Data Fitting Results with PrEP")
-legend("Predicted Cases (model)", "True Cases (data)", 'Location', 'Best')
-hold off
-
-%Display fitted parameters
-fprintf("Model with PrEP: \n\nbeta = " + beta_fit(:,1) + "\ndelta_I = " + beta_fit(:,2) + "\ndelta_A = " + beta_fit(:,3));
-
-%Reproduction Numbers
-beta = beta_fit(:,1);
-delta_I = beta_fit(:,2);
-delta_A = beta_fit(:,3);
-
-R0 = (beta*eta_val*(tau_A + mu_val+delta_A)+sigma_val*beta)/((sigma_val+mu_val+tau_I+delta_I)*(tau_A+mu_val+delta_A));
-RV = ((beta*eta_val*(tau_A+ mu_val+delta_A)+sigma_val*beta)*(q_val-epsilon_val*q_val))/((tau_I+sigma_val+mu_val+delta_I)*(tau_A+mu_val+delta_A));
-
-hit =(1-(1/R0));
-
-fprintf("Model with PrEP: \n\nR_0 = " + R0 + "\nR_V = " + RV + "\nHerd Immunity = " + hit);
-
-
-ci = nlparci(beta_fit,resid,'jacobian', J);
-
-fprintf("Model with PrEP Confidence Intervals: \n\nbeta = [%g, %g]\ndelta_I = [%g, %g]\ndelta_A = [%g, %g]", ci(1,:),ci(2,:),ci(3,:));
-
-%Functions 
-
-function new_cases = model_wrapper(b, t, IC, A)
-    beta  = b(1);
-    delta_I = b(2);
-    deltA = b(3);
-    params = [A, beta, delta_I, deltA];
-
-    [t_sol, sol] = ode45(@(t,y) disease_dynamics(t,y,params), [t(1), t(end)], IC);
-
-    % Extract states
-    Sl = sol(:,1);
-    Sh = sol(:,2);
-    I  = sol(:,3);
-    A_state  = sol(:,4);   % avoid name conflict
-    N  = sum(sol,2);
-
-    eta = params(3);
-    epsilon = params(5);
-    beta = params(9);
-
-    incidence = beta*((eta*I + A_state)./N).*(Sl + (1-epsilon)*Sh);
-
-    new_cases = interp1(t_sol, incidence, t);
-end
-
+%% Function
 
 function ddt = disease_dynamics(t, states, params)
     Sl = states(1);
@@ -158,13 +48,14 @@ function ddt = disease_dynamics(t, states, params)
     sigma = params(6);
     tau_I = params(7);
     tau_A = params(8);
-    beta = params(9);
-    delta_I = params(10);
-    deltA = params(11);
+    cp_val = params(9);
+    beta = params(10);
+    delta_I = params(11);
+    deltA = params(12);
 
     dSldt = pi*(1-q)-beta*((eta*I+A)/N)*Sl-mu*Sl;
-    dShdt = pi*q-beta*(1-epsilon)*((eta*I+A)/N)*Sh-mu*Sh;
-    dIdt = beta*((eta*I+A)/N)*(Sl+(1-epsilon)*Sh)-sigma*I-tau_I*I-mu*I-delta_I*I;
+    dShdt = pi*q-beta*(1-epsilon*cp_val)*((eta*I+A)/N)*Sh-mu*Sh;
+    dIdt = beta*((eta*I+A)/N)*(Sl+(1-epsilon*cp_val)*Sh)-sigma*I-tau_I*I-mu*I-delta_I*I;
     dAdt = sigma*I-tau_A*A-mu*A-deltA*A;
     dTdt = tau_I*I+tau_A*A-mu*T;
 
@@ -173,6 +64,9 @@ end
 
 %% HW6
 infected_time10 = [infected_time; 2018; 2019; 2020; 2021];
+beta = 1;
+delta_I = 0.034185;
+delta_A = 0.84026;
 [t_sol, sol] = ode45(@(t,y)disease_dynamics(t,y,[A, beta, delta_I, delta_A]), infected_time10, initial_conditions);
 Sl = sol(:,1);
 Sh = sol(:,2);
@@ -181,7 +75,7 @@ A_state  = sol(:,4);   % avoid name conflict
 N  = sum(sol,2);
 death = delta_I*I + delta_A*A_state;
 death = death/365;
-incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val)*Sh))/365;
+incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val*cp_val)*Sh))/365;
 
 
 
@@ -207,14 +101,14 @@ hold off
 figure;
 for i = 0:2
     eta_val1 = 0.5+(i*0.25);
-    A = [pi_val, q_val, eta_val1, mu_val, epsilon_val, sigma_val, tau_I, tau_A];
+    A = [pi_val, q_val, eta_val1, mu_val, epsilon_val, sigma_val, tau_I, tau_A,cp_val];
     [t_sol, sol] = ode45(@(t,y)disease_dynamics(t,y,[A, beta, delta_I, delta_A]), infected_time10, initial_conditions);
     Sl = sol(:,1);
     Sh = sol(:,2);
     I  = sol(:,3);
     A_state  = sol(:,4);
     N  = sum(sol,2);
-    incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val)*Sh))/365;
+    incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val*cp_val)*Sh))/365;
 
     plot(infected_time10, incidence, 'LineWidth', 2); hold on
     ylabel("Daily Incidence")
@@ -227,7 +121,7 @@ hold off
 figure;
 for i = 0:2
     eta_val2 = 0.5+(i*0.25);
-    A = [pi_val, q_val, eta_val2, mu_val, epsilon_val, sigma_val, tau_I, tau_A];
+    A = [pi_val, q_val, eta_val2, mu_val, epsilon_val, sigma_val, tau_I, tau_A, cp_val];
     [t_sol, sol] = ode45(@(t,y)disease_dynamics(t,y,[A, beta, delta_I, delta_A]), infected_time10, initial_conditions);
     I  = sol(:,3);
     A_state  = sol(:,4);
@@ -246,14 +140,14 @@ hold off
 figure;
 for i = 0:4
     q_val1 = 0+(i*0.25);
-    A = [pi_val, q_val1, eta_val, mu_val, epsilon_val, sigma_val, tau_I, tau_A];
+    A = [pi_val, q_val1, eta_val, mu_val, epsilon_val, sigma_val, tau_I, tau_A, cp_val];
     [t_sol, sol] = ode45(@(t,y)disease_dynamics(t,y,[A, beta, delta_I, delta_A]), infected_time10, initial_conditions);
     Sl = sol(:,1);
     Sh = sol(:,2);
     I  = sol(:,3);
     A_state  = sol(:,4);
     N  = sum(sol,2);
-    incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val)*Sh))/365;
+    incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val*cp_val)*Sh))/365;
 
     plot(infected_time10, incidence, 'LineWidth', 2); hold on
     ylabel("Daily Incidence")
@@ -276,22 +170,114 @@ for i = 1:4
         newtau_I = 0.2;
         newtau_A = newtau_I;
     elseif i==4
-        newtau_I = 0.05;
+        newtau_I = 1;
         newtau_A = newtau_I;
     end
-    A = [pi_val, q_val, eta_val, mu_val, epsilon_val, sigma_val, newtau_I, newtau_A];
+    A = [pi_val, q_val, eta_val, mu_val, epsilon_val, sigma_val, newtau_I, newtau_A, cp_val];
     [t_sol, sol] = ode45(@(t,y)disease_dynamics(t,y,[A, beta, delta_I, delta_A]), infected_time10, initial_conditions);
     Sl = sol(:,1);
     Sh = sol(:,2);
     I  = sol(:,3);
     A_state  = sol(:,4);
     N  = sum(sol,2);
-    incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val)*Sh))/365;
+    incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val*cp_val)*Sh))/365;
 
     plot(infected_time10, incidence, 'LineWidth', 2); hold on
     ylabel("Daily Incidence")
     xlabel("Year")
-    title("Effect of risk structure")
+    title("Effect of ART (Incidences)")
 end
     legend("tau = 0.05","tau=0.1","tau=0.2", "tau=1", 'Location', 'Best')
 hold off
+
+figure;
+for i = 1:4
+    if i == 1
+        newtau_I = 0.05;
+        newtau_A = newtau_I;
+    elseif i == 2
+        newtau_I = 0.1;
+        newtau_A = newtau_I;
+    elseif i == 3
+        newtau_I = 0.2;
+        newtau_A = newtau_I;
+    elseif i==4
+        newtau_I = 1;
+        newtau_A = newtau_I;
+    end
+    A = [pi_val, q_val, eta_val, mu_val, epsilon_val, sigma_val, newtau_I, newtau_A, cp_val];
+    [t_sol, sol] = ode45(@(t,y)disease_dynamics(t,y,[A, beta, delta_I, delta_A]), infected_time10, initial_conditions);
+    Sl = sol(:,1);
+    Sh = sol(:,2);
+    I  = sol(:,3);
+    A_state  = sol(:,4);
+    N  = sum(sol,2);
+    death = delta_I*I + delta_A*A_state;
+    death = death/365;
+
+    plot(infected_time10, death, 'LineWidth', 2); hold on
+    ylabel("Daily Death")
+    xlabel("Year")
+    title("Effect of ART (Deaths)")
+    cumdeath = trapz(infected_time10, death)
+end
+    legend("tau = 0.05","tau=0.1","tau=0.2", "tau=1", 'Location', 'Best')
+hold off
+
+%part d
+figure;
+for i = 1:4
+    if i == 1
+        eff = 0;
+    elseif i == 2
+        eff = 0.5;
+    elseif i == 3
+        eff = 0.75;
+    elseif i==4
+        eff = 0.95;
+    end
+    A = [pi_val, q_val, eta_val, mu_val, eff, sigma_val, tau_I, tau_A, cp_val];
+    [t_sol, sol] = ode45(@(t,y)disease_dynamics(t,y,[A, beta, delta_I, delta_A]), infected_time10, initial_conditions);
+    Sl = sol(:,1);
+    Sh = sol(:,2);
+    I  = sol(:,3);
+    A_state  = sol(:,4);
+    N  = sum(sol,2);
+    incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-eff*cp_val)*Sh))/365;
+
+    plot(infected_time10, incidence, 'LineWidth', 2); hold on
+    ylabel("Daily Incidence")
+    xlabel("Year")
+    title("Effect of PrEP")
+end
+    legend("epsilon = 0","epsilon=0.5","epsilon=0.75", "epsilon=0.95", 'Location', 'Best')
+hold off
+
+figure;
+for i = 1:4
+    if i == 1
+        con = 0;
+    elseif i == 2
+        con = 0.5;
+    elseif i == 3
+        con = 0.75;
+    elseif i==4
+        con = 0.95;
+    end
+    A = [pi_val, q_val, eta_val, mu_val, eff, sigma_val, tau_I, tau_A, cp_val];
+    [t_sol, sol] = ode45(@(t,y)disease_dynamics(t,y,[A, beta, delta_I, delta_A]), infected_time10, initial_conditions);
+    Sl = sol(:,1);
+    Sh = sol(:,2);
+    I  = sol(:,3);
+    A_state  = sol(:,4);
+    N  = sum(sol,2);
+    incidence = (beta*((eta_val*I + A_state)./N).*(Sl + (1-epsilon_val*con)*Sh))/365;
+
+    plot(infected_time10, incidence, 'LineWidth', 2); hold on
+    ylabel("Daily Incidence")
+    xlabel("Year")
+    title("Effect of PrEP, % pop. on PrEP")
+end
+    legend("pop = 0","pop=0.5","pop=0.75", "pop=0.95", 'Location', 'Best')
+hold off
+
